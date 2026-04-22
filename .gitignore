@@ -1,0 +1,26 @@
+# root gitignore
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Backend
+backend/target/
+backend/.mvn/
+backend/*.log
+backend/.factorypath
+backend/.project
+backend/.settings/
+backend/bin/
+
+# IDEs and OS
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
