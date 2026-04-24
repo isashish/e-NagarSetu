@@ -27,5 +27,6 @@ public class User {
     private String role; // CITIZEN, ADMIN, STAFF
     private String ward;
     private Integer civicScore;
+    private String assignedVehicleId; // For STAFF/DRIVER
     private java.time.LocalDateTime lastLogin;
 }

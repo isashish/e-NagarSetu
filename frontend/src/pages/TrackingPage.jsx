@@ -1,36 +1,150 @@
 import React, { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { Truck, MapPin, Clock, Fuel, CheckCircle, Navigation, RefreshCw, Zap } from 'lucide-react'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
+import { useApp } from '../context/AppContext'
+import { fetchVehicles } from '../api'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
-const vehicles = [
-  { id: 'V-01', number: 'MP04-AB-1234', driver: 'Ramesh Yadav', contact: '9876543210', ward: 'Ward 3 & 4', status: 'Active', fuel: 72, speed: 18, pickups: 18, eta: '10:32 AM', lat: 30, lng: 45 },
-  { id: 'V-02', number: 'MP04-CD-5678', driver: 'Suresh Patel', contact: '9765432109', ward: 'Ward 5 & 6', status: 'Active', fuel: 45, speed: 12, pickups: 22, eta: '11:05 AM', lat: 55, lng: 60 },
-  { id: 'V-03', number: 'MP04-EF-9012', driver: 'Mahesh Verma', contact: '9654321098', ward: 'Ward 1 & 2', status: 'Maintenance', fuel: 0, speed: 0, pickups: 0, eta: '--', lat: 75, lng: 30 },
+// Fix for Leaflet default icon issues in React
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: markerIcon2x,
+    iconUrl: markerIcon,
+    shadowUrl: markerShadow,
+});
+
+const initialVehicles = [
+  { id: 'V-01', vehicleNumber: 'MP04-AB-1234', driverName: 'Ramesh Yadav', contactNumber: '9876543210', ward: 'Ward 3 & 4', status: 'ACTIVE', fuelLevel: 72, speed: 18, pickups: 18, nextEta: '10:32 AM', currentLat: 23.2599, currentLng: 77.4126 },
+  { id: 'V-02', vehicleNumber: 'MP04-CD-5678', driverName: 'Suresh Patel', contactNumber: '9765432109', ward: 'Ward 5 & 6', status: 'ACTIVE', fuelLevel: 45, speed: 12, pickups: 22, nextEta: '11:05 AM', currentLat: 23.2492, currentLng: 77.4242 },
+  { id: 'V-03', vehicleNumber: 'MP04-EF-9012', driverName: 'Mahesh Verma', contactNumber: '9654321098', ward: 'Ward 1 & 2', status: 'MAINTENANCE', fuelLevel: 0, speed: 0, pickups: 0, nextEta: '--', currentLat: 23.2333, currentLng: 77.4333 },
 ]
 
 const routeStops = [
-  { name: 'Ward 5 Depot', type: 'start', done: true, eta: '7:00 AM', lat: 15, lng: 20 },
-  { name: 'Block A – 12 houses', type: 'stop', done: true, eta: '7:45 AM', lat: 25, lng: 35 },
-  { name: 'Market Area – 8 shops', type: 'stop', done: true, eta: '8:30 AM', lat: 40, lng: 50 },
-  { name: 'Block B – 15 houses', type: 'stop', done: false, eta: '10:32 AM', lat: 55, lng: 60, current: true },
-  { name: 'School Road – 10 houses', type: 'stop', done: false, eta: '11:15 AM', lat: 65, lng: 72 },
-  { name: 'Ward 5 Dumping Yard', type: 'end', done: false, eta: '12:00 PM', lat: 80, lng: 85 },
+  { name: 'Ward 5 Depot', type: 'start', done: true, eta: '7:00 AM', lat: 23.2500, lng: 77.4000 },
+  { name: 'Block A – 12 houses', type: 'stop', done: true, eta: '7:45 AM', lat: 23.2550, lng: 77.4100 },
+  { name: 'Market Area – 8 shops', type: 'stop', done: true, eta: '8:30 AM', lat: 23.2600, lng: 77.4200 },
+  { name: 'Block B – 15 houses', type: 'stop', done: false, eta: '10:32 AM', lat: 23.2650, lng: 77.4300, current: true },
+  { name: 'School Road – 10 houses', type: 'stop', done: false, eta: '11:15 AM', lat: 23.2700, lng: 77.4400 },
+  { name: 'Ward 5 Dumping Yard', type: 'end', done: false, eta: '12:00 PM', lat: 23.2800, lng: 77.4500 },
 ]
 
 const COLORS = { 'Active': '#22c55e', 'Maintenance': '#f97316' }
 
 export default function TrackingPage() {
-  const [selected, setSelected] = useState(vehicles[0])
+  const { user } = useApp()
+  const [vehicles, setVehicles] = useState(initialVehicles)
+  const [selected, setSelected] = useState(initialVehicles[0])
   const [tick, setTick] = useState(0)
+  const [mapCenter, setMapCenter] = useState([23.2599, 77.4126]) // Default Bhopal
+  const [hasJumpedToUser, setHasJumpedToUser] = useState(false)
+  const [liveLocation, setLiveLocation] = useState(null)
+  const [distance, setDistance] = useState(null)
 
-  // Simulate vehicle movement
+  // Fetch Live Vehicles from Backend
+  useEffect(() => {
+    const loadVehicles = async () => {
+      try {
+        const data = await fetchVehicles();
+        if (data && data.length > 0) {
+          setVehicles(data);
+          // Keep the selected vehicle object updated with fresh data
+          setSelected(prev => data.find(v => v.id === prev.id) || data[0]);
+        }
+      } catch (err) {
+        console.error("Failed to fetch live vehicles:", err);
+      }
+    };
+
+    loadVehicles();
+    const interval = setInterval(loadVehicles, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  // Track Browser Live Location
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setLiveLocation([latitude, longitude]);
+      },
+      (err) => console.error("Live GPS error:", err),
+      { enableHighAccuracy: true }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // Distance Calculation Utility (Haversine Formula)
+  useEffect(() => {
+    if (liveLocation && selected) {
+      const R = 6371; // Radius of Earth in km
+      const dLat = (selected.currentLat - liveLocation[0]) * Math.PI / 180;
+      const dLon = (selected.currentLng - liveLocation[1]) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(liveLocation[0] * Math.PI / 180) * Math.cos(selected.currentLat * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      setDistance((R * c).toFixed(2));
+    }
+  }, [liveLocation, selected]);
+
+  // Geocoding: Fetch coordinates based on user address/ward
+  useEffect(() => {
+    const fetchCoords = async () => {
+      const locationQuery = user?.address || (user?.ward ? `Ward ${user.ward}, Vidisha` : null);
+      if (!locationQuery) return;
+      
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationQuery)}&limit=1`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+          const { lat, lon } = data[0];
+          const newCoords = [parseFloat(lat), parseFloat(lon)];
+          setMapCenter(newCoords);
+          if (!hasJumpedToUser) setHasJumpedToUser(true);
+        }
+      } catch (err) {
+        console.error("Geocoding failed:", err);
+      }
+    };
+
+    fetchCoords();
+  }, [user, hasJumpedToUser]);
+
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 2000)
     return () => clearInterval(interval)
   }, [])
 
-  // Animate vehicle position slightly
-  const getPos = (base, offset) => base + Math.sin(tick * 0.3 + offset) * 2
+  const getPos = (base, offset) => base + Math.sin(tick * 0.3 + offset) * 0.0005
+
+  // Map Component to handle center changes
+  function ChangeView({ center, zoom }) {
+    const map = useMap();
+    useEffect(() => {
+      if (center && center[0] && center[1]) {
+        map.setView(center, zoom, { animate: true });
+      }
+    }, [center, zoom]);
+    return null;
+  }
+
+  // Effect to jump to live location once it's found
+  useEffect(() => {
+    if (liveLocation && !hasJumpedToUser) {
+      setMapCenter(liveLocation);
+      setHasJumpedToUser(true);
+    }
+  }, [liveLocation, hasJumpedToUser]);
 
   return (
     <Layout>
@@ -76,27 +190,27 @@ export default function TrackingPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div className={`w-10 h-10 rounded-[1rem] flex items-center justify-center shrink-0 ${v.status === 'Active' ? 'bg-primary-100 text-primary-600' : 'bg-saffron-100 text-saffron-600'}`}>
+                    <div className={`w-10 h-10 rounded-[1rem] flex items-center justify-center shrink-0 ${v.status === 'ACTIVE' ? 'bg-primary-100 text-primary-600' : 'bg-saffron-100 text-saffron-600'}`}>
                       <Truck size={20} />
                     </div>
                     <span className={`text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border ${
-                      v.status === 'Active' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-saffron-50 text-saffron-600 border-saffron-100'
+                      v.status === 'ACTIVE' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-saffron-50 text-saffron-600 border-saffron-100'
                     }`}>{v.status}</span>
                   </div>
 
                   <div className="space-y-1 mb-4">
-                    <p className="font-display font-bold text-navy-800 text-base">{v.number}</p>
+                    <p className="font-display font-bold text-navy-800 text-base">{v.vehicleNumber}</p>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{v.ward}</p>
                   </div>
 
-                  {v.status === 'Active' && (
+                  {v.status === 'ACTIVE' && (
                     <div className="space-y-3 pt-3 border-t border-slate-100">
                       <div className="flex items-center justify-between">
                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Energy Core</span>
-                         <span className="text-[10px] font-bold text-navy-800">{v.fuel}%</span>
+                         <span className="text-[10px] font-bold text-navy-800">{v.fuelLevel}%</span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-1000 ${v.fuel > 50 ? 'bg-primary-500' : v.fuel > 25 ? 'bg-saffron-500' : 'bg-red-500'}`} style={{ width: `${v.fuel}%` }} />
+                        <div className={`h-full rounded-full transition-all duration-1000 ${v.fuelLevel > 50 ? 'bg-primary-500' : v.fuelLevel > 25 ? 'bg-saffron-500' : 'bg-red-500'}`} style={{ width: `${v.fuelLevel}%` }} />
                       </div>
                     </div>
                   )}
@@ -105,7 +219,7 @@ export default function TrackingPage() {
             </div>
 
             {/* Premium ETA Forecast */}
-            {selected.status === 'Active' && (
+            {selected.status === 'ACTIVE' && (
               <div className="relative rounded-[2rem] overflow-hidden bg-gradient-to-br from-navy-900 to-navy-800 p-8 text-white shadow-2xl animate-slide-up border border-white/5">
                 <div className="absolute top-0 right-0 p-4 opacity-10 animate-float pointer-events-none">
                    <Clock size={80} />
@@ -118,7 +232,7 @@ export default function TrackingPage() {
                     <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary-300">Arrival Logic</span>
                   </div>
                   <div>
-                    <h4 className="text-5xl font-display font-bold text-white tracking-tight">{selected.eta}</h4>
+                    <h4 className="text-5xl font-display font-bold text-white tracking-tight">{selected.nextEta}</h4>
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-300 mt-2">Target Sector: <span className="text-white">Block 05</span></p>
                   </div>
                   <div className="p-4 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/10 flex items-center gap-3 shadow-inner">
@@ -151,103 +265,117 @@ export default function TrackingPage() {
                 </div>
               </div>
               
-              <div className="flex-1 bg-[#f8fafc] relative overflow-hidden group">
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#1e293b 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-                
-                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  {/* Grid System Styling */}
-                  <g stroke="#e2e8f0" strokeWidth="0.5">
-                    {[...Array(10)].map((_, i) => (
-                      <React.Fragment key={i}>
-                        <line x1={i * 10} y1="0" x2={i * 10} y2="100" />
-                        <line x1="0" y1={i * 10} x2="100" y2={i * 10} />
-                      </React.Fragment>
-                    ))}
-                  </g>
-
-                  {/* Main Arterial Roads */}
-                  <g stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round">
-                    <line x1="5" y1="50" x2="95" y2="50" />
-                    <line x1="50" y1="5" x2="50" y2="95" />
-                    <line x1="25" y1="5" x2="25" y2="95" strokeWidth="1.5" />
-                    <line x1="75" y1="5" x2="75" y2="95" strokeWidth="1.5" />
-                    <line x1="5" y1="25" x2="95" y2="25" strokeWidth="1.5" />
-                    <line x1="5" y1="75" x2="95" y2="75" strokeWidth="1.5" />
-                  </g>
-
-                  {/* Dynamic Route Path */}
-                  <polyline
-                    points={routeStops.map(s => `${s.lng},${s.lat}`).join(' ')}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="1.2"
-                    strokeDasharray="4 2"
-                    opacity="0.6"
-                    className="animate-dash"
+              <div className="flex-1 bg-[#f8fafc] relative overflow-hidden group min-h-[400px]">
+                <MapContainer 
+                  center={mapCenter} 
+                  zoom={16} 
+                  scrollWheelZoom={true}
+                  className="h-full w-full z-10"
+                >
+                  <ChangeView center={selected.id === vehicles[0].id ? (liveLocation || mapCenter) : [selected.currentLat, selected.currentLng]} zoom={16} />
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                    url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
                   />
                   
-                  {/* Completed Corridor */}
-                  <polyline
-                    points={routeStops.filter(s => s.done || s.current).map(s => `${s.lng},${s.lat}`).join(' ')}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="1.2"
-                    opacity="1"
-                  />
-                </svg>
+                  {/* User's Registered Location Marker */}
+                  <Marker position={mapCenter}>
+                    <Popup>
+                      <div className="font-display font-bold text-navy-800">My Registered Location</div>
+                      <div className="text-[10px] text-slate-500 uppercase tracking-widest">{user?.address || `Ward ${user?.ward}`}</div>
+                    </Popup>
+                  </Marker>
 
-                {/* Satellite Nodes (Stops) */}
-                {routeStops.map((stop, i) => (
-                  <div key={i} className="absolute transform -translate-x-1/2 -translate-y-1/2 group/stop" style={{ left: `${stop.lng}%`, top: `${stop.lat}%` }}>
-                    <div className={`w-3 h-3 rounded-full border-4 border-white shadow-xl transition-all ${
-                      stop.current ? 'bg-saffron-500 scale-150 ring-4 ring-saffron-500/20' : 
-                      stop.done ? 'bg-primary-500' : 'bg-slate-300'
-                    }`} />
-                    <div className="absolute left-6 top-1/2 -translate-y-1/2 bg-navy-800 text-white text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover/stop:opacity-100 transition-opacity whitespace-nowrap z-30">
-                       {stop.name}
-                    </div>
-                  </div>
-                ))}
+                  {/* User's Live GPS Location (Blue Dot) */}
+                  {liveLocation && (
+                    <Marker 
+                      position={liveLocation}
+                      icon={L.divIcon({
+                        className: 'live-user-icon',
+                        html: `
+                          <div class="relative flex items-center justify-center">
+                            <div class="absolute w-6 h-6 bg-blue-500/30 rounded-full animate-ping"></div>
+                            <div class="relative w-3 h-3 bg-blue-600 rounded-full border-2 border-white shadow-lg"></div>
+                          </div>
+                        `,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                      })}
+                    >
+                      <Popup>
+                        <div className="font-display font-bold text-blue-600">You Are Here</div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Live Signal Tracking</p>
+                      </Popup>
+                    </Marker>
+                  )}
 
-                {/* Dynamic Fleet Units */}
-                {vehicles.filter(v => v.status === 'Active').map((v, i) => (
-                  <div
-                    key={v.id}
-                    className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-[2000ms] z-20"
-                    style={{
-                      left: `${getPos(v.lng, i)}%`,
-                      top: `${getPos(v.lat, i * 2)}%`
-                    }}
-                  >
-                    <div className={`relative w-12 h-12 rounded-[1.25rem] flex items-center justify-center shadow-2xl border-2 border-white group/unit ${
-                      selected.id === v.id ? 'bg-navy-900 scale-125' : 'bg-primary-600'
-                    }`}>
-                      <div className="absolute inset-0 bg-primary-400 rounded-full animate-ping-slow opacity-20"></div>
-                      <Truck size={18} className="text-white relative z-10" />
-                      
-                      {selected.id === v.id && (
-                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-navy-500 text-white text-[10px] px-3 py-1.5 rounded-xl font-display font-bold whitespace-nowrap shadow-xl border border-navy-400 z-30">
-                          {v.number} ( {v.eta} )
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  {/* Active Vehicles */}
+                  {vehicles.filter(v => v.status === 'ACTIVE').map((v, i) => (
+                    <Marker 
+                      key={v.id} 
+                      position={[getPos(v.currentLat, i * 2), getPos(v.currentLng, i)]}
+                      icon={L.divIcon({
+                        className: 'custom-truck-icon',
+                        html: `
+                          <div class="relative flex items-center justify-center">
+                            <div class="absolute w-10 h-10 bg-primary-500/20 rounded-full animate-ping shadow-[0_0_15px_rgba(34,197,94,0.4)]"></div>
+                            <img src="https://cdn-icons-png.flaticon.com/512/2776/2776067.png" style="width: 38px; height: 38px; position: relative; z-index: 10;" />
+                          </div>
+                        `,
+                        iconSize: [40, 40],
+                        iconAnchor: [20, 20],
+                      })}
+                    >
+                      <Popup>
+                        <div className="font-display font-bold text-navy-800">{v.vehicleNumber}</div>
+                        <div className="text-[10px] text-primary-600 font-bold uppercase tracking-widest">{v.ward}</div>
+                        <div className="text-[10px] text-slate-500 mt-1">Driver: {v.driverName}</div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
 
                 {/* Map Overlay Controls */}
-                <div className="absolute bottom-6 left-6 flex flex-col gap-3">
+
+                {/* Map Overlay Controls */}
+                <div className="absolute bottom-6 left-6 flex flex-col gap-3 z-[1000]">
+                   {/* Distance Card */}
+                   {distance && (
+                     <div className="bg-navy-900/90 backdrop-blur-xl rounded-2xl p-4 shadow-2xl border border-white/10 animate-slide-right">
+                        <div className="flex items-center gap-3">
+                           <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                              <Navigation size={14} className="text-primary-400" />
+                           </div>
+                           <div>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Unit Proximity</p>
+                              <p className="text-sm font-display font-bold text-white">{distance} km <span className="text-[10px] text-primary-400">to Truck</span></p>
+                           </div>
+                        </div>
+                     </div>
+                   )}
+
                    <div className="bg-white/90 backdrop-blur-md rounded-2xl p-4 text-[9px] font-bold uppercase tracking-[0.1em] text-slate-600 shadow-2xl border border-slate-100 space-y-3 min-w-[140px]">
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-saffron-500 shadow-lg shadow-saffron-500/40"></div> Focus Target
+                        <div className="w-2 h-2 rounded-full bg-blue-500 shadow-lg shadow-blue-500/40 animate-pulse"></div> Live Position
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-primary-500"></div> Perimeter Unit
+                        <div className="w-2 h-2 rounded-full bg-saffron-500 shadow-lg shadow-saffron-500/40"></div> Registered Point
                       </div>
                       <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-slate-300"></div> Inactive Node
+                        <img src="https://cdn-icons-png.flaticon.com/512/2776/2776067.png" className="w-3 h-3" alt="truck" /> Service Unit
                       </div>
                    </div>
                 </div>
+
+                {/* Snap to Me Button */}
+                {liveLocation && (
+                  <button 
+                    onClick={() => setMapCenter(liveLocation)}
+                    className="absolute top-6 right-6 z-[1000] w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-2xl border border-slate-100 text-primary-600 hover:bg-primary-50 active:scale-95 transition-all"
+                  >
+                    <MapPin size={20} />
+                  </button>
+                )}
               </div>
             </div>
 

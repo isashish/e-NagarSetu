@@ -54,4 +54,10 @@ public class UserService {
     public User updateUser(User user) {
         return userRepository.save(user);
     }
+
+    public User assignVehicleToUser(String id, String vehicleId) {
+        User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("User not found"));
+        user.setAssignedVehicleId(vehicleId);
+        return userRepository.save(user);
+    }
 }

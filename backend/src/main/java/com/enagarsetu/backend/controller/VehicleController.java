@@ -22,4 +22,9 @@ public class VehicleController {
     public List<Vehicle> getByWard(@PathVariable String ward) {
         return service.getVehiclesByWard(ward);
     }
+
+    @PutMapping("/{id}/location")
+    public Vehicle updateLocation(@PathVariable String id, @RequestParam double lat, @RequestParam double lng) {
+        return service.updateLocation(id, lat, lng);
+    }
 }

@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import Layout from '../components/Layout'
 import { useApp } from '../context/AppContext'
-import { User, Mail, Phone, MapPin, Star, Shield, Edit3, Save, CheckCircle, Award, TrendingUp } from 'lucide-react'
+import { updateUser } from '../api'
+import { User, Mail, Phone, MapPin, Star, Shield, Edit3, Save, CheckCircle, Award, TrendingUp, RefreshCw } from 'lucide-react'
 
 const achievements = [
   { icon: '🏆', title: 'Consistent Reporter', desc: '30 days streak of daily garbage marking', earned: true },
@@ -19,23 +20,50 @@ const activityLog = [
 ]
 
 export default function ProfilePage() {
-  const { user } = useApp()
+  const { user, login } = useApp()
   const [editing, setEditing] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  
   const [form, setForm] = useState({
-    name: user?.fullName || user?.name || 'Ashish Suryavanshi',
-    email: user?.email || 'ashish@example.com',
-    mobile: user?.phone || user?.mobile || '9876543210',
-    address: user?.address || 'House No. 45, Shivaji Nagar',
-    city: user?.city || 'Vidisha',
-    ward: user?.ward || '5',
-    pincode: user?.pincode || '464001',
+    name: user?.fullName || user?.name || '',
+    email: user?.email || '',
+    mobile: user?.phone || user?.mobile || '',
+    address: user?.address || '',
+    city: user?.city || '',
+    ward: user?.ward || '',
+    pincode: user?.pincode || '',
   })
 
-  const handleSave = () => {
-    setSaved(true)
-    setEditing(false)
-    setTimeout(() => setSaved(false), 3000)
+  const handleSave = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const updatedData = {
+        ...user,
+        fullName: form.name,
+        email: form.email,
+        phone: form.mobile,
+        address: form.address,
+        city: form.city,
+        ward: form.ward,
+        pincode: form.pincode
+      };
+      
+      const response = await updateUser(user.id, updatedData);
+      
+      // Update global context
+      login(response, response.role.toLowerCase());
+      
+      setSaved(true)
+      setEditing(false)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err.message || 'Failed to update profile. Ensure backend is running.');
+    } finally {
+      setLoading(false)
+    }
   }
 
   const score = user?.civicScore || user?.score || 740
@@ -59,8 +87,18 @@ export default function ProfilePage() {
                         {form.name.charAt(0)}
                      </div>
                   </div>
-                  <button onClick={() => setEditing(!editing)} className="absolute -bottom-2 -right-2 w-10 h-10 rounded-xl bg-white text-navy-900 flex items-center justify-center shadow-xl hover:scale-110 transition-all border border-slate-100">
-                     {editing ? <Save size={18} className="text-primary-600" /> : <Edit3 size={18} />}
+                  <button 
+                    disabled={loading}
+                    onClick={() => editing ? handleSave() : setEditing(true)} 
+                    className="absolute -bottom-2 -right-2 w-10 h-10 rounded-xl bg-white text-navy-900 flex items-center justify-center shadow-xl hover:scale-110 transition-all border border-slate-100 disabled:opacity-50"
+                  >
+                     {loading ? (
+                       <RefreshCw size={18} className="animate-spin text-primary-600" />
+                     ) : editing ? (
+                       <Save size={18} className="text-primary-600" />
+                     ) : (
+                       <Edit3 size={18} />
+                     )}
                   </button>
                </div>
                <div className="space-y-2">
@@ -97,6 +135,13 @@ export default function ProfilePage() {
           <div className="glass-card rounded-2xl p-4 border-l-4 border-green-500 flex items-center gap-3 animate-slide-up">
             <CheckCircle size={20} className="text-green-500" />
             <p className="text-sm font-display font-bold text-navy-800">Operational Profile Synchronized Successfully</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="glass-card rounded-2xl p-4 border-l-4 border-red-500 flex items-center gap-3 animate-slide-up">
+            <Shield size={20} className="text-red-500" />
+            <p className="text-sm font-display font-bold text-red-800">{error}</p>
           </div>
         )}
 

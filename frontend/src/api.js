@@ -83,3 +83,54 @@ export const registerUser = async (userData) => {
   }
   return response.json();
 };
+
+export const updateUser = async (userId, userData) => {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Update failed');
+  }
+  return response.json();
+};
+
+export const fetchVehicles = async () => {
+  const response = await fetch(`${API_BASE_URL}/vehicles`);
+  if (!response.ok) throw new Error('Failed to fetch vehicles');
+  return response.json();
+};
+
+export const updateVehicleLocation = async (vehicleId, lat, lng) => {
+  const response = await fetch(`${API_BASE_URL}/vehicles/${vehicleId}/location?lat=${lat}&lng=${lng}`, {
+    method: 'PUT',
+  });
+  if (!response.ok) throw new Error('Failed to update vehicle location');
+  return response.json();
+};
+
+export const assignVehicle = async (userId, vehicleId) => {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}/assign-vehicle/${vehicleId}`, {
+    method: 'PUT',
+  });
+  if (!response.ok) throw new Error('Failed to assign vehicle');
+  return response.json();
+};
+
+export const fetchWastePickups = async (userId) => {
+  const response = await fetch(`${API_BASE_URL}/waste/user/${userId}`);
+  if (!response.ok) throw new Error('Failed to fetch waste pickups');
+  return response.json();
+};
+
+export const createWastePickup = async (pickupData) => {
+  const response = await fetch(`${API_BASE_URL}/waste`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pickupData),
+  });
+  if (!response.ok) throw new Error('Failed to schedule waste pickup');
+  return response.json();
+};

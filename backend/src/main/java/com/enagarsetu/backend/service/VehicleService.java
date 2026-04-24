@@ -18,4 +18,11 @@ public class VehicleService {
     public List<Vehicle> getVehiclesByWard(String ward) {
         return repository.findByWard(ward);
     }
+
+    public Vehicle updateLocation(String id, double lat, double lng) {
+        Vehicle vehicle = repository.findById(id).orElseThrow(() -> new RuntimeException("Vehicle not found"));
+        vehicle.setCurrentLat(lat);
+        vehicle.setCurrentLng(lng);
+        return repository.save(vehicle);
+    }
 }

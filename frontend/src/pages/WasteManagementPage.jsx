@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { useApp } from '../context/AppContext'
+import { createWastePickup, fetchWastePickups } from '../api'
 import { Trash2, CheckCircle, Users, Clock, Calendar, Star, ArrowRight, Leaf, Zap, RefreshCw, ShieldAlert, Truck } from 'lucide-react'
 
 const scheduleData = [
@@ -20,17 +21,53 @@ const wasteTypes = [
 ]
 
 export default function WasteManagementPage() {
-  const { role } = useApp()
+  const { role, user, setUser } = useApp()
   const [garbageReady, setGarbageReady] = useState(false)
   const [selectedType, setSelectedType] = useState('Mixed Waste')
   const [neighborMode, setNeighborMode] = useState(false)
   const [neighborName, setNeighborName] = useState('')
   const [confirmed, setConfirmed] = useState(false)
-  const [points, setPoints] = useState(740)
+  const [points, setPoints] = useState(user?.civicScore || 740)
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(false)
 
-  const confirmPickup = () => {
-    setConfirmed(true)
-    if (!neighborMode) setPoints(p => p + 10)
+  useEffect(() => {
+    if (user?.id) {
+      fetchWastePickups(user.id).then(data => setHistory(data)).catch(console.error);
+    }
+  }, [user]);
+
+  const confirmPickup = async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const pickupData = {
+        wasteType: selectedType,
+        neighborMode: neighborMode,
+        neighborName: neighborMode ? neighborName : null,
+        user: { id: user.id }
+      };
+      
+      const result = await createWastePickup(pickupData);
+      setConfirmed(true);
+      
+      // Update local points
+      const newPoints = neighborMode ? Math.max(0, points - 5) : points + 10;
+      setPoints(newPoints);
+      
+      // Update global user context
+      if (setUser) {
+        setUser({ ...user, civicScore: newPoints });
+      }
+      
+      // Refresh history
+      const updatedHistory = await fetchWastePickups(user.id);
+      setHistory(updatedHistory);
+    } catch (err) {
+      alert("Failed to schedule pickup: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -151,44 +188,60 @@ export default function WasteManagementPage() {
                 <div className="pt-2">
                   <button
                     onClick={confirmPickup}
-                    className="w-full bg-primary-600 text-white py-5 rounded-[1.5rem] font-display font-bold text-lg hover:bg-primary-700 transition-all shadow-xl shadow-primary-500/20 active:scale-95 flex items-center justify-center gap-3"
+                    disabled={loading}
+                    className="w-full bg-primary-600 text-white py-5 rounded-[1.5rem] font-display font-bold text-lg hover:bg-primary-700 transition-all shadow-xl shadow-primary-500/20 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    Authorize Pickup Dispatch <ArrowRight size={20} />
+                    {loading ? (
+                      <RefreshCw size={24} className="animate-spin" />
+                    ) : (
+                      <>Authorize Pickup Dispatch <ArrowRight size={20} /></>
+                    )}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Weekly Timeline */}
-            <div className="glass-card rounded-[2rem] p-8">
-               <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-xl font-display font-bold text-navy-800">Route Activity Log</h3>
-                  <div className="flex gap-2">
-                     <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest"><div className="w-2 h-2 rounded-full bg-primary-500"></div> Present</span>
-                     <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest"><div className="w-2 h-2 rounded-full bg-slate-300"></div> Logged</span>
-                  </div>
-               </div>
-               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {scheduleData.map((s, i) => (
-                    <div key={i} className={`p-4 rounded-2xl transition-all duration-300 border-t-4 ${
-                      s.status === 'today' ? 'bg-primary-600 text-white border-primary-400 shadow-xl shadow-primary-500/20' : 
-                      s.status === 'completed' ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-60' : 'bg-white border-slate-100 text-slate-500'
-                    }`}>
-                       <p className="text-[10px] font-bold uppercase tracking-widest mb-1 opacity-60">{s.day.slice(0, 3)}</p>
-                       <p className="font-display font-bold text-base truncate mb-3">{s.type.split(' ')[0]}</p>
-                       {s.status === 'today' ? (
-                         <div className="flex items-center gap-1 bg-white/20 p-1.5 rounded-lg">
-                           <Clock size={12} className="animate-spin-slow" />
-                           <span className="text-[9px] font-bold uppercase">Active</span>
+            {/* Weekly Timeline & Recent Activity */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="glass-card rounded-[2rem] p-8">
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-xl font-display font-bold text-navy-800">Weekly Cycle</h3>
+                    <Calendar size={20} className="text-primary-500" />
+                </div>
+                <div className="space-y-4">
+                    {scheduleData.slice(0, 4).map((s, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                         <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${s.status === 'today' ? 'bg-primary-500 animate-pulse' : 'bg-slate-300'}`} />
+                            <span className="text-sm font-display font-bold text-navy-800">{s.day}</span>
                          </div>
-                       ) : s.status === 'completed' ? (
-                         <CheckCircle size={18} className="text-primary-500" />
-                       ) : (
-                         <div className="w-5 h-5 rounded-full border-2 border-slate-200"></div>
-                       )}
-                    </div>
-                  ))}
-               </div>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{s.type}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              <div className="glass-card rounded-[2rem] p-8">
+                <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-xl font-display font-bold text-navy-800">Recent Requests</h3>
+                    <Clock size={20} className="text-saffron-500" />
+                </div>
+                <div className="space-y-4 max-h-[180px] overflow-y-auto custom-scrollbar pr-2">
+                    {history.length > 0 ? history.slice().reverse().map((h, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                         <div className="flex flex-col">
+                            <span className="text-sm font-display font-bold text-navy-800">{h.wasteType}</span>
+                            <span className="text-[9px] text-slate-400 uppercase font-bold">{new Date(h.requestedAt).toLocaleDateString()}</span>
+                         </div>
+                         <span className={`text-[9px] font-bold px-2 py-1 rounded-lg uppercase tracking-widest ${
+                           h.status === 'PENDING' ? 'bg-saffron-100 text-saffron-700' : 'bg-primary-100 text-primary-700'
+                         }`}>{h.status}</span>
+                      </div>
+                    )) : (
+                      <p className="text-center text-slate-400 text-xs py-10 font-body">No recent requests found.</p>
+                    )}
+                </div>
+              </div>
             </div>
           </div>
 

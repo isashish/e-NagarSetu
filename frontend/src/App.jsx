@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import CitizenDashboard from './pages/CitizenDashboard'
 import AdminDashboard from './pages/AdminDashboard'
+import StaffDashboard from './pages/StaffDashboard'
 import ComplaintsPage from './pages/ComplaintsPage'
 import PaymentsPage from './pages/PaymentsPage'
 import WasteManagementPage from './pages/WasteManagementPage'
@@ -14,6 +15,8 @@ import ProfilePage from './pages/ProfilePage'
 import BookingPage from './pages/BookingPage'
 import NoticesPage from './pages/NoticesPage'
 import VaultPage from './pages/VaultPage'
+import GPSBroadcaster from './components/GPSBroadcaster'
+import ScrollToTop from './components/ScrollToTop'
 
 function AppRoutes() {
   const { user, role } = useApp()
@@ -23,7 +26,11 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={user ? <Navigate to={role === 'admin' ? '/admin' : '/dashboard'} /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <RegisterPage />} />
-      <Route path="/dashboard" element={user && role !== 'admin' ? <CitizenDashboard /> : <Navigate to="/login" />} />
+      <Route path="/dashboard" element={
+        user ? (
+          role === 'staff' ? <StaffDashboard /> : <CitizenDashboard />
+        ) : <Navigate to="/login" />
+      } />
       <Route path="/admin" element={user && role === 'admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
       <Route path="/complaints" element={user ? <ComplaintsPage /> : <Navigate to="/login" />} />
       <Route path="/payments" element={user ? <PaymentsPage /> : <Navigate to="/login" />} />
@@ -41,6 +48,8 @@ function AppRoutes() {
 export default function App() {
   return (
     <AppProvider>
+      <ScrollToTop />
+      <GPSBroadcaster />
       <AppRoutes />
     </AppProvider>
   )

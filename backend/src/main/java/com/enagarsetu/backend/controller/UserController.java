@@ -32,4 +32,9 @@ public class UserController {
         user.setId(id);
         return userService.updateUser(user);
     }
+
+    @PutMapping("/{id}/assign-vehicle/{vehicleId}")
+    public User assignVehicle(@PathVariable String id, @PathVariable String vehicleId) {
+        return userService.assignVehicleToUser(id, vehicleId);
+    }
 }
