@@ -23,4 +23,9 @@ public class ComplaintController {
     public Complaint createComplaint(@RequestBody Complaint complaint) {
         return complaintService.createComplaint(complaint);
     }
+
+    @PutMapping("/{id}/status")
+    public Complaint updateComplaintStatus(@PathVariable String id, @RequestParam String status) {
+        return complaintService.updateComplaintStatus(id, status);
+    }
 }

@@ -40,7 +40,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to={user ? (role === 'admin' ? '/admin' : '/dashboard') : '/'} className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-md">
               <span className="text-white font-display font-bold text-sm">eN</span>
             </div>

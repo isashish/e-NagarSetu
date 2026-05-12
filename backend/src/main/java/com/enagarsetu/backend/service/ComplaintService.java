@@ -19,7 +19,15 @@ public class ComplaintService {
 
     public Complaint createComplaint(Complaint complaint) {
         complaint.setCreatedAt(LocalDateTime.now());
-        complaint.setStatus("PENDING");
+        if(complaint.getStatus() == null) {
+            complaint.setStatus("PENDING");
+        }
+        return complaintRepository.save(complaint);
+    }
+
+    public Complaint updateComplaintStatus(String id, String status) {
+        Complaint complaint = complaintRepository.findById(id).orElseThrow(() -> new RuntimeException("Complaint not found"));
+        complaint.setStatus(status.toUpperCase());
         return complaintRepository.save(complaint);
     }
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import Layout from '../components/Layout'
 import { useApp } from '../context/AppContext'
-import { fetchComplaints, createComplaint } from '../api'
+import { fetchComplaints, createComplaint, updateComplaintStatus } from '../api'
 import { FileText, Plus, Upload, MapPin, X, CheckCircle, Clock, AlertCircle, Search, ShieldCheck } from 'lucide-react'
 
 const initialComplaints = [
@@ -56,7 +56,7 @@ export default function ComplaintsPage() {
         title: c.title,
         category: c.category,
         description: c.description,
-        status: c.status?.charAt(0).toUpperCase() + c.status?.slice(1).toLowerCase().replace('_', ' ') || 'Pending',
+        status: c.status ? c.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ') : 'Pending',
         priority: c.priority?.charAt(0).toUpperCase() + c.priority?.slice(1).toLowerCase() || 'Medium',
         location: c.location || 'N/A',
         date: new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -69,8 +69,14 @@ export default function ComplaintsPage() {
     }
   }
 
-  const resolveComplaint = (id) => {
-    setComplaints(prev => prev.map(c => c.id === id ? { ...c, status: 'Resolved' } : c))
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      const actualId = id.startsWith('C-') ? id.slice(2) : id;
+      await updateComplaintStatus(actualId, newStatus.toUpperCase().replace(' ', '_'));
+      loadComplaints();
+    } catch (error) {
+      console.error('Failed to update status:', error);
+    }
   }
 
   const filtered = complaints.filter(c => {
@@ -181,7 +187,7 @@ export default function ComplaintsPage() {
         </div>
 
         {/* Complaints Grid - Bento Style */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filtered.length === 0 ? (
             <div className="col-span-full glass-card rounded-[2rem] text-center py-24">
               <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-6 text-slate-300">
@@ -195,16 +201,16 @@ export default function ComplaintsPage() {
               <div
                 key={c.id}
                 onClick={() => setSelected(c)}
-                className="glass-card rounded-[2rem] p-8 group cursor-pointer hover:shadow-2xl hover:shadow-navy-900/5 transition-all duration-500 border border-transparent hover:border-primary-500/20"
+                className="glass-card rounded-[2rem] p-6 group cursor-pointer hover:shadow-2xl hover:shadow-navy-900/5 transition-all duration-500 border border-transparent hover:border-primary-500/20"
               >
-                <div className="flex items-start justify-between mb-6">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500 ${
+                <div className="flex items-start justify-between mb-5">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500 ${
                     c.status === 'Resolved' ? 'bg-primary-50 text-primary-600' : c.status === 'In Progress' ? 'bg-saffron-50 text-saffron-600' : 'bg-red-50 text-red-600'
                   }`}>
                     <StatusIcon status={c.status} />
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                     <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded-md">{c.id}</span>
+                     <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded-md" title={c.id}>{c.id.length > 12 ? c.id.substring(0, 10) + '...' : c.id}</span>
                      <div className="flex gap-2">
                         <PriorityBadge priority={c.priority} />
                      </div>
@@ -228,13 +234,17 @@ export default function ComplaintsPage() {
 
                   <div className="pt-4 flex items-center justify-between border-t border-slate-100">
                      <StatusBadge status={c.status} />
-                     {role === 'admin' && c.status !== 'Resolved' ? (
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); resolveComplaint(c.id); }}
-                          className="text-[10px] font-bold uppercase tracking-[0.2em] bg-primary-600 text-white px-4 py-2 rounded-xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-500/20 flex items-center gap-2"
+                     {role === 'admin' ? (
+                        <select 
+                          value={c.status}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => { e.stopPropagation(); handleUpdateStatus(c.id, e.target.value); }}
+                          className="text-[10px] font-bold uppercase tracking-[0.2em] bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-xl hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all cursor-pointer shadow-sm"
                         >
-                          <ShieldCheck size={14} /> Resolve Case
-                        </button>
+                          <option value="Pending">Pending</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Resolved">Resolved</option>
+                        </select>
                      ) : (
                         <button className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary-600 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
                           Audit Log →
@@ -341,7 +351,7 @@ export default function ComplaintsPage() {
                </button>
                <div className="relative z-10 space-y-2">
                   <div className="flex items-center gap-3">
-                     <span className="text-[10px] font-mono text-primary-300 bg-white/10 px-2.5 py-1 rounded-full uppercase tracking-widest">{selected.id}</span>
+                     <span className="text-[10px] font-mono text-primary-300 bg-white/10 px-2.5 py-1 rounded-full uppercase tracking-widest" title={selected.id}>{selected.id.length > 12 ? selected.id.substring(0, 10) + '...' : selected.id}</span>
                      <StatusBadge status={selected.status} />
                   </div>
                   <h3 className="text-3xl font-display font-bold text-white uppercase tracking-tight line-clamp-1">{selected.title}</h3>
@@ -394,9 +404,30 @@ export default function ComplaintsPage() {
                   </div>
                </div>
 
-               <button disabled className="w-full py-4 rounded-2xl bg-slate-100 text-slate-400 font-display font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed">
-                  Audit logs are restricted to Municipal Admins
-               </button>
+               {role === 'admin' ? (
+                  <div className="bg-primary-50 rounded-2xl p-6 flex items-center justify-between border border-primary-100">
+                     <div>
+                        <p className="text-sm font-display font-bold text-navy-800">Admin Actions</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Update Case Status</p>
+                     </div>
+                     <select 
+                       value={selected.status}
+                       onChange={(e) => {
+                         handleUpdateStatus(selected.id, e.target.value);
+                         setSelected({...selected, status: e.target.value});
+                       }}
+                       className="text-[10px] font-bold uppercase tracking-[0.2em] bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-xl hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all cursor-pointer shadow-sm"
+                     >
+                       <option value="Pending">Pending</option>
+                       <option value="In Progress">In Progress</option>
+                       <option value="Resolved">Resolved</option>
+                     </select>
+                  </div>
+               ) : (
+                  <button disabled className="w-full py-4 rounded-2xl bg-slate-100 text-slate-400 font-display font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed">
+                     Audit logs are restricted to Municipal Admins
+                  </button>
+               )}
             </div>
           </div>
         </div>

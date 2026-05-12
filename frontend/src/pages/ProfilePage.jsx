@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { useApp } from '../context/AppContext'
 import { updateUser } from '../api'
@@ -20,7 +21,8 @@ const activityLog = [
 ]
 
 export default function ProfilePage() {
-  const { user, login } = useApp()
+  const { user, login, logout } = useApp()
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -64,6 +66,12 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleTerminateSessions = () => {
+    // In a real app, this would call an API to invalidate other session tokens
+    logout()
+    navigate('/')
   }
 
   const score = user?.civicScore || user?.score || 740
@@ -283,8 +291,8 @@ export default function ProfilePage() {
                       </div>
                    </div>
                 </div>
-                <button className="w-full mt-8 py-4 rounded-2xl bg-red-50 text-red-600 font-display font-bold text-sm hover:bg-red-100 transition-all">
-                   Terminate all Citations
+                <button onClick={handleTerminateSessions} className="w-full mt-8 py-4 rounded-2xl bg-red-50 text-red-600 font-display font-bold text-sm hover:bg-red-100 transition-all">
+                   Terminate all Sessions
                 </button>
              </div>
           </div>

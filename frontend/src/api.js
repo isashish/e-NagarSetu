@@ -16,6 +16,14 @@ export const createComplaint = async (complaintData) => {
   return response.json();
 };
 
+export const updateComplaintStatus = async (id, status) => {
+  const response = await fetch(`${API_BASE_URL}/complaints/${id}/status?status=${status}`, {
+    method: 'PUT',
+  });
+  if (!response.ok) throw new Error('Failed to update complaint status');
+  return response.json();
+};
+
 export const fetchNotices = async () => {
   const response = await fetch(`${API_BASE_URL}/notices`);
   if (!response.ok) throw new Error('Failed to fetch notices');
